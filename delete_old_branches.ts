@@ -1,6 +1,5 @@
 import { createObjectCsvWriter } from 'csv-writer';
 import simpleGit, { SimpleGit } from 'simple-git';
-import { execSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -11,7 +10,6 @@ type LogEntry = {
     deletedAt: string;
     commitHash?: string;
     commitMessage?: string;
-    author: string;
     mergedToMain: boolean;
 };
 
@@ -63,6 +61,14 @@ async function deleteOldBranches(repoUrl: string, cutoffDate: Date, isDryRun: bo
                 if (!isDryRun) {
                     await git.checkout('main');
                     await git.deleteLocalBranch(branch, true);
+
+                    try {
+                        await git.push(['origin', '--delete', branch]);
+                    } catch (error: any) {
+                        console.error(`❌ Failed to delete branch ${branch}: ${error.message}`);
+                        // Continue with other branches even if one fails
+                        continue;
+                    }
                 }
 
                 deleted.push({
@@ -71,7 +77,6 @@ async function deleteOldBranches(repoUrl: string, cutoffDate: Date, isDryRun: bo
                     deletedAt: isDryRun ? 'DRY-RUN' : new Date().toISOString(),
                     commitHash: commitMeta.hash,
                     commitMessage: commitMeta.message,
-                    author: commitMeta.author,
                     mergedToMain: merged,
                 });
 
@@ -102,21 +107,10 @@ async function getAllBranches(git: SimpleGit): Promise<string[]> {
         .map(remoteBranch => remoteBranch.replace('origin/', ''));
 }
 
-async function getMergeDate(git: SimpleGit, branch: string): Promise<string | null> {
-    try {
-        const mergeBase = await git.raw(['merge-base', branch, 'main']);
-        const log = await git.raw(['log', '-1', '--format=%ci', mergeBase]);
-        return log.trim();
-    } catch {
-        return null;
-    }
-}
-
 type CommitMeta = {
     date: Date;
     hash: string;
     message: string;
-    author: string;
 };
 
 async function getLastCommitMeta(git: SimpleGit, branch: string): Promise<CommitMeta | null> {
@@ -125,7 +119,7 @@ async function getLastCommitMeta(git: SimpleGit, branch: string): Promise<Commit
 
         // ISO 8601 date | commit hash | commit message
         const logOutput = await git.raw(['log', '-1', '--format=%cI|%H|%s', branch]);
-        const [dateStr, hash, message, author] = logOutput.trim().split('|');
+        const [dateStr, hash, message] = logOutput.trim().split('|');
 
         const commitDate = new Date(dateStr);
 
@@ -134,7 +128,7 @@ async function getLastCommitMeta(git: SimpleGit, branch: string): Promise<Commit
             return null;
         }
 
-        return { date: commitDate, hash, message, author };
+        return { date: commitDate, hash, message };
     } catch (err) {
         console.warn(`⚠️ Failed to get last commit for ${branch}:`, err);
         return null;
@@ -167,7 +161,6 @@ async function createCsvLog(entries: LogEntry[]) {
             { id: 'deletedAt', title: 'Date Deleted' },
             { id: 'commitHash', title: 'Last Commit Hash' },
             { id: 'commitMessage', title: 'Last Commit Message' },
-            { id: 'author', title: 'Author' },
             { id: 'mergedToMain', title: 'Merged to Main' },
         ],
     });
