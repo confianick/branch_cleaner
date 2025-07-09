@@ -115,17 +115,3 @@ git@github.com:username/repo.git
 ```
 
 Make sure your SSH key is added at: [https://github.com/settings/keys](https://github.com/settings/keys)
-
----
-
-## 💡 Tips
-
-* Use `--dry-run` first to preview deletions
-* Works best with test/fork repos before running on production
-* Modify the script to:
-
-  * Filter branches by prefix
-  * Skip protected patterns (e.g., `release/*`)
-  * Delete only unmerged branches
-
----
